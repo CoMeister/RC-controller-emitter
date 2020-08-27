@@ -1,7 +1,14 @@
 /**
  * TODO list:
- * problem with vibration, connection's lost
- * TEST
+ * 
+ * 
+ * colorpalette
+ * red: 230, 57, 70
+ * white: 241, 250, 238
+ * wblue: 168, 218, 220
+ * blue: 69, 123, 157
+ * dblue: 29, 53, 87
+ * 
  **/
 
 
@@ -10,8 +17,10 @@
 #include <RF24.h>
 #include "Ucglib.h"
 #include <printf.h>
+#include <Model.h>
+#include <Trim.h>
 
-#define TRIMSTEPS 1
+#define TRIMSTEPS 2
 #define BTNDELAY 100
 
 RF24 radio(9,10); //CE, CSN
@@ -19,17 +28,21 @@ RF24 radio(9,10); //CE, CSN
 const uint64_t txAddr = 0xABCDABCD71;
 const uint64_t rxAddr = 0x544d52687C;
 
-const int gimballAddr[4] = {A0, A1, A2, A3}; //roll, pitch, throttle, yaw
-const int btnValue = A4;
+const byte gimballAddr[4] = {A0, A1, A2, A3}; //roll, pitch, throttle, yaw
+const byte btnValue = A4;
 
-const int btnArray[12][2] = {{840,843}, {851,856}, {860,868}, {879,883}, {890,898}, {907,915}, {920,930}, {937,948}, {954,962}, {970,982}, {989,1000}, {1009,1023}};
+const int btnArray[12][2] = {{800,843}, {851,856}, {860,868}, {879,883}, {890,898}, {907,915}, {920,929}, {934,948}, {950,962}, {970,982}, {989,1000}, {1009,1023}};
 int trims[4] = {0,0,0,0};
-int timeAtLastBtnPressed = 0;
+byte timeAtLastBtnPressed = 0;
+int menuLevel = -1; //-1 --> no into the menu
+bool press = true;
 
-int indexPressedBtn = -1;
+byte indexPressedBtn = -1;
 
 int lastAckReceived = 0;
-int ledDelay = 0;
+
+const String menuElem[4] = {"Models", "Trims", "Reverse command", "Channel"};
+byte currentMenuPos = 0;
 
 //String dataPre = "";
 
@@ -44,15 +57,6 @@ struct Commands
 Commands commands;
 Ucglib_ST7735_18x128x160_HWSPI screen(/*cd=*/ 9 , /*cs=*/ 8, /*reset=*/ 7);
 
-
-
-/*void searchRemoteMachine(){
-  if(radio.isAckPayloadAvailable()){
-    char data[32] = "";
-    radio.read(&data,sizeof(data));
-    //Serial.println("Acknolewge: " + String(data)); //name
-  }
-}*/
 //47 60 75
 int mapJoyVal(int val, int min, int mid, int max, bool rev){
   //constrain(val, min, max);
@@ -71,6 +75,14 @@ int mapJoyVal(int val, int min, int mid, int max, bool rev){
   return ( rev ? 255 - val : val );   //j'ai pas encore compris comment ça marche
 }
 
+void showInfosScreen(){
+  screen.clearScreen();
+  screen.setFont(ucg_font_fur11_hf);
+  screen.setColor(230, 57, 70);
+  screen.setPrintPos(5,15);
+  screen.print("Radio v1.0");
+}
+
 void radioConfiguration(){
   radio.begin();                    //activer le module
   radio.setChannel(0x01);
@@ -86,24 +98,83 @@ void radioConfiguration(){
   radio.powerUp();
 }
 
-void showTrim(int trimID, int trimsVal){
-  volatile int width = 100;
-  volatile int height = 40;
-  volatile int x = screen.getWidth()/2-width/2;
-  volatile int y = screen.getHeight()/2-height/2;
-  screen.setColor(0,0,0);
-  screen.drawBox(x, y, width, height);
-  screen.setColor(255,255,255);
-  screen.drawFrame(x-1, y-1, width+2, height+2);
+void menuNav(){
+  screen.setColor(241, 250, 238);
+  screen.drawFrame(0, currentMenuPos*17+2, screen.getWidth(), 15);
+}
 
-  screen.setPrintPos(x+5,screen.getHeight()/2);
-  screen.print("Trims " + String(trimID) + ": " + String(trimsVal));
-  
+void menuNav(bool way){
+  byte menuElemLength = *(&menuElem + 1) - menuElem;
+  screen.setColor(0,0,0);
+  screen.drawFrame(0, currentMenuPos*17+2, screen.getWidth(), 15);
+  if(way){
+    if(currentMenuPos < menuElemLength-1){
+      currentMenuPos++;
+    }else{
+      currentMenuPos=0;
+    }
+  }else{
+    if(currentMenuPos > 0){
+      currentMenuPos--;
+    }else{
+      currentMenuPos = menuElemLength-1;
+    }
+  }
+  menuNav();
+}
+
+void menu(){
+  screen.clearScreen();
+  screen.setFont(ucg_font_fur11_hf);
+  screen.setColor(241, 250, 238);
+  byte pos = 15;
+  //int sizeOfanArray = *(&array + 1) - array;
+  byte menuElemLength = *(&menuElem + 1) - menuElem;
+  for(byte i = 0; i < menuElemLength; i++){
+    screen.setPrintPos(5, pos);
+    screen.print(menuElem[i]);
+    pos+=17;
+  }
+  menuNav();
+}
+
+void showTrims(){
+  screen.clearScreen();
+  screen.setFont(ucg_font_fur11_hf);
+  screen.setColor(241, 250, 238);
+
+  String trimNames[4] = {"Roll", "Pitch", "Throttle", "Yaw"};
+  byte pos = 15;
+  //int sizeOfanArray = *(&array + 1) - array;
+  byte trimNamesLength = *(&trimNames + 1) - trimNames;
+  for(byte i = 0; i < trimNamesLength; i++){
+    screen.setPrintPos(5, pos);
+    screen.print(trimNames[i]);
+    screen.setPrintPos(100, pos);
+    screen.print(trims[i]);
+
+    pos+=(screen.getWidth()-30)/trimNamesLength;
+  }
+}
+
+void updateTrimVal(int trimID){
+  screen.setFont(ucg_font_fur11_hf);
+  screen.setColor(178, 247, 239);
+  byte pos = 15;
+  byte trimsLength = *(&trims + 1) - trims;
+  for(byte i = 0; i < trimsLength; i++){
+     if(trimID == i){
+        screen.setPrintPos(100, pos);
+        screen.print(String(trims[i]) + "    ");
+        return;
+     }
+     pos+=(screen.getWidth()-30)/trimsLength;
+  }
 }
 
 void setup() {
   Serial.begin(9600);
-  for(int i = 0; i < 4; i++){
+  for(byte i = 0; i < 4; i++){
     pinMode(gimballAddr[i], INPUT);
   }
 
@@ -112,23 +183,21 @@ void setup() {
   radioConfiguration();
   printf_begin();
   radio.printDetails();
-  //Serial.end();
+  Serial.end();
 
-  volatile int count = 0;
+  byte count = 0;
 
   while(!radio.isChipConnected() && count < 5){
     radioConfiguration();
     count ++;
   }
+  
 
   screen.begin(UCG_FONT_MODE_SOLID);
   screen.setRotate270();
-  screen.clearScreen();
-
-  screen.setFont(ucg_font_helvB08_hf);
-  screen.setPrintPos(0,25);
-  screen.setColor(255, 255, 255);
-  screen.print("Hello World!");
+  
+  showInfosScreen();
+  //menu();
 }
 
 long printDel = 0;
@@ -147,63 +216,109 @@ void loop() {
   radio.write(&commands, sizeof(Commands));
 
   
-  volatile int val = analogRead(btnValue);
-  if(val > 0 && (millis() - timeAtLastBtnPressed) >= BTNDELAY){
-    for(int i = 0; i < 12; i++){  //watch all btns
+  int val = analogRead(btnValue);
+  //Serial.print(String(val));
+  if(val > 0 && (millis() - timeAtLastBtnPressed) >= BTNDELAY && press){
+    for(byte i = 0; i < 12; i++){  //watch all btns
       if(val >= btnArray[i][0] && val <= btnArray[i][1]){ //check which button is pressed
         indexPressedBtn = i;  //set button pressed indexPressedBtn
-        Serial.println(indexPressedBtn);
+        //Serial.println(" --> " + String(indexPressedBtn));
         switch (indexPressedBtn) {  //button action list
           case 0:
             trims[0]+=TRIMSTEPS;
-            showTrim(0, trims[0]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(0);
+            }
+            //showTrim(0, trims[0]);
             break;
           case 1:
             trims[0]-=TRIMSTEPS;
-            showTrim(0, trims[0]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(0);
+            }
+            //showTrim(0, trims[0]);
             break;
           case 2:
             trims[1]+=TRIMSTEPS;
-            showTrim(1, trims[1]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(1);
+            }
+            //showTrim(1, trims[1]);
             break;
           case 3:
             trims[1]-=TRIMSTEPS;
-            showTrim(1, trims[1]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(1);
+            }
+            //showTrim(1, trims[1]);
             break;
           case 4:
             trims[2]+=TRIMSTEPS;
-            showTrim(2, trims[2]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(2);
+            }
+            //showTrim(2, trims[2]);
             break;
           case 5:
             trims[2]-=TRIMSTEPS;
-            showTrim(2, trims[2]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(2);
+            }
             break;
           case 6:
             trims[3]+=TRIMSTEPS;
-            showTrim(3, trims[3]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(3);
+            }
+            //showTrim(3, trims[3]);
             break;
           case 7:
             trims[3]-=TRIMSTEPS;
-            showTrim(3, trims[3]);
+            if(menuLevel == 1 && currentMenuPos == 1){
+              updateTrimVal(3);
+            }
+            //showTrim(3, trims[3]);
             break;
           case 8:
             //menu/return
+            if(menuLevel < 0){
+              menuLevel++;
+            }else{
+              menuLevel--;
+            }
+            if(menuLevel < 0){
+              showInfosScreen();
+            }else{
+              menu();
+            }
             break;
           case 9:
-            //menu+
+            //menu-
+            if(menuLevel == 0){
+              menuNav(false);
+            }
             break;
           case 10:
-            //menu-
+            //menu+
+            if(menuLevel == 0){
+              menuNav(true);
+            }
             break;
           case 11:
             //menu ok
+            if(currentMenuPos == 1 && menuLevel > -1){
+              showTrims();
+            }
+            menuLevel++;
             break;
-          indexPressedBtn = -1;
-          break;
         }
+        indexPressedBtn = -1;
       }
     }
     timeAtLastBtnPressed = millis();
+    press = false;
+  }else{
+    press = true;
   }
   
   
