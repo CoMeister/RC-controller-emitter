@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name Display_Graphipersoc)(type Legacy)(uri ${KIPRJMOD}/Display_Graphipersoc.lib)(options "")(descr ""))
+)
