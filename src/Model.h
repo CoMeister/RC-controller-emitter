@@ -13,7 +13,10 @@ public:
     Model(String name);
     String getName();
     Trim getTrim(byte index);
+    byte getTrimLength();
     void setName(String name);
-    void incrementTrim(byte index, int amount);
+    void setTrimAmount(byte id, byte amount);
+    void reverseTrim(byte id);
+    void incTrim(byte id, int step);
 };
 #endif
