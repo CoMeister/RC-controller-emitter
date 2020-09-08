@@ -22,7 +22,7 @@
 #include <EEPROM.h>
 
 #define TRIMSTEP 2
-#define BTNDELAY 100
+#define BTNDELAY 500
 
 RF24 radio(9,10); //CE, CSN
 
