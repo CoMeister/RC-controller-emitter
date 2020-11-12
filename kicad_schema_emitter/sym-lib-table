@@ -1,3 +1,4 @@
 (sym_lib_table
   (lib (name Display_Graphipersoc)(type Legacy)(uri ${KIPRJMOD}/Display_Graphipersoc.lib)(options "")(descr ""))
+  (lib (name rc-emitter_tft-rescue)(type Legacy)(uri ${KIPRJMOD}/rc-emitter_tft-rescue.lib)(options "")(descr ""))
 )

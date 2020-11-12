@@ -15,11 +15,12 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <RF24.h>
-#include "Ucglib.h"
+//#include "Ucglib.h"
 #include <printf.h>
 #include <Model.h>
 #include <Trim.h>
 #include <EEPROM.h>
+#include <LiquidCrystal.h>
 
 #define TRIMSTEP 2
 #define BTNDELAY 500
@@ -29,14 +30,15 @@ RF24 radio(9,10); //CE, CSN
 const uint64_t txAddr = 0xABCDABCD71;
 const uint64_t rxAddr = 0x544d52687C;
 
-const byte gimballAddr[4] = {A0, A1, A2, A3}; //roll, pitch, throttle, yaw
+const byte gimballAddr[4] = {A1, A0, A2, A3}; //roll, pitch, throttle, yaw
 const byte btnValue = A4;
 
 const int btnArray[12][2] = {{800,843}, {851,856}, {860,868}, {879,883}, {890,898}, {907,915}, {920,929}, {934,948}, {950,962}, {970,982}, {989,1000}, {1009,1023}};
-Model models[8] = {Model("Model - 0"), Model("Model - 1"), Model("Model - 2"), Model("Model - 3"), Model("Model - 4"), Model("Model - 5"), Model("Model - 6"), Model("Model - 7")};
+Model models[16] = {Model("Model-0"), Model("Model-1"), Model("Model-2"), Model("Model-3"), Model("Model-4"), Model("Model-5"), Model("Model-6"), Model("Model-7"), Model("Model-8"), Model("Model-9"), Model("Model-10"), Model("Model-11"), Model("Model-12"), Model("Model-13"), Model("Model-14"), Model("Model-15")};
 byte currentMenuModelPos = 0;
 byte currentModel = 0;
 byte currentTrimPos = 0;
+byte menuLCDpos = 0;
 byte timeAtLastBtnPressed = 0;
 int menuLevel = -1; //-1 --> no into the menu
 bool press = true;
@@ -59,20 +61,11 @@ struct Commands
 };
 
 
-struct Colors{
-  byte r;
-  byte g;
-  byte b;
-};
-
-Colors red = {230, 57, 70};
-Colors white = {241, 250, 238};
-Colors wblue = {168, 218, 220};
-Colors blue = {69, 123, 157};
-Colors dblue = {29, 53, 87};
-
 Commands commands;
-Ucglib_ST7735_18x128x160_HWSPI screen(/*cd=*/ 9 , /*cs=*/ 8, /*reset=*/ 7);
+//Ucglib_ST7735_18x128x160_HWSPI screen(/*cd=*/ 9 , /*cs=*/ 8, /*reset=*/ 7);
+
+const int rs = 3, en = 4, d4 = 5, d5 = 6, d6 = 7, d7 = 8;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 //47 60 75
 int mapJoyVal(int val, int min, int mid, int max, bool rev){
@@ -89,15 +82,21 @@ int mapJoyVal(int val, int min, int mid, int max, bool rev){
     val = map(val, mid, max, 128, 255);
   }
   
-  return ( rev ? 255 - val : val );   //j'ai pas encore compris comment ça marche
+  return ( rev ? 255 - val : val );   //comparison operator
 }
 
 void showInfosScreen(){
-  screen.clearScreen();
-  screen.setFont(ucg_font_fur11_hr);
-  screen.setColor(red.r, red.g, red.b);
-  screen.setPrintPos(5,15);
-  screen.print("Radio v1.0");
+  //screen.clearScreen();
+  //screen.setFont(ucg_font_fur11_hr);
+  //screen.setColor(red.r, red.g, red.b);
+  //screen.setPrintPos(5,15);
+  //screen.print("Radio v1.0");
+  lcd.clear();
+  lcd.print("Cob's radio"); 
+  lcd.setCursor(0,1);
+  lcd.print(models[currentModel].getName() + "connard");
+  lcd.setCursor(0,2);
+  lcd.print("bla bla");
 }
 
 void radioConfiguration(){
@@ -115,144 +114,188 @@ void radioConfiguration(){
   radio.powerUp();
 }
 
-void showMenuNav(byte pos, byte gap){
-  screen.setColor(white.r, white.g, white.b);
-  screen.drawFrame(0, pos*gap+4, screen.getWidth(), 21);
+void showMenuNav(byte pos){
+  //screen.setColor(white.r, white.g, white.b);
+  //screen.drawFrame(0, pos*gap+4, //screen.getWidth(), 21);
+  lcd.setCursor(0, pos);
+  lcd.print(">");
 }
 
 void universalMenuNave(bool way, byte menuLength, byte gap, byte &pos){
-  screen.setColor(0,0,0);
-  screen.drawFrame(0, pos*gap+4, screen.getWidth(), 21);
+  //screen.setColor(0,0,0);
+  //screen.drawFrame(0, pos*gap+4, //screen.getWidth(), 21);
+  lcd.setCursor(0, pos);
+  lcd.print(" ");
   if(way){
     if(pos < menuLength-1){
       pos++;
+      if(menuLCDpos < 4){
+        menuLCDpos++;
+      }
+      
     }else{
       pos=0;
+      menuLCDpos = 0;
     }
   }else{
     if(pos > 0){
       pos--;
+      if(menuLCDpos>0){
+        menuLCDpos--;
+      }
     }else{
       pos = menuLength-1;
+      menuLCDpos = 3;
     }
   }
-  showMenuNav(pos, gap);
+  showMenuNav(menuLCDpos);
 }
 
 void menu(){
-  screen.clearScreen();
-  screen.setFont(ucg_font_fur11_hr);
-  screen.setColor(white.r, white.g, white.b);
-  byte pos = 20;
+  //screen.clearScreen();
+  //screen.setFont(ucg_font_fur11_hr);
+  //screen.setColor(white.r, white.g, white.b);
+  lcd.clear();
+  //lcd.setCursor(0,0);
+  //byte pos = 0;
   //int sizeOfanArray = *(&array + 1) - array;
   byte menuElemLength = *(&menuElem + 1) - menuElem;
   for(byte i = 0; i < menuElemLength; i++){
-    screen.setPrintPos(5, pos);
-    screen.print(menuElem[i]);
-    pos+=20;
+    //screen.setPrintPos(5, pos);
+    //screen.print(menuElem[i]);
+    //pos++;
+    lcd.setCursor(2, i);
+    lcd.println(menuElem[i]);
   }
-  showMenuNav(currentMenuPos, 20);
+  showMenuNav(currentMenuPos);
 }
 
 void menuModels(){
-  screen.clearScreen();
-  screen.setFont(ucg_font_fur11_hr);
-  screen.setColor(white.r, white.g, white.b);
-  byte pos = 20;
+  lcd.clear();
+  //lcd.setCursor(0,0);
+  //screen.clearScreen();
+  //screen.setFont(ucg_font_fur11_hr);
+  //screen.setColor(white.r, white.g, white.b);
+  //byte pos = 20;
   //int sizeOfanArray = *(&array + 1) - array;
-  byte modelsLength = *(&models + 1) - models;
-  for(byte i = 0; i < modelsLength; i++){
-    screen.setPrintPos(5, pos);
+  //byte modelsLength = *(&models + 1) - models;
+
+  byte lastElemToShow = 0;
+  if(currentMenuModelPos < 4){
+    lastElemToShow = 0;
+  }else{
+    lastElemToShow = currentMenuModelPos;
+  }
+  for(byte i = lastElemToShow-3; i < lastElemToShow+1; i++){
+    //screen.setPrintPos(5, pos);
     if(currentModel == i){
-      screen.setColor(blue.r, blue.g, blue.b);
-      screen.print(models[i].getName());
-      pos+=20;
-      screen.setColor(white.r, white.g, white.b);
-    }else{
+      //screen.setColor(blue.r, blue.g, blue.b);
+      //screen.print(models[i].getName());
+      //pos+=20;
+      //screen.setColor(white.r, white.g, white.b);
       
-      screen.print(models[i].getName());
-      pos+=20;
+      lcd.setCursor(1, i-(lastElemToShow-3));
+      lcd.print("[" + models[i].getName() + "]");
+    }else{
+      lcd.setCursor(2, i-(lastElemToShow-3));
+      lcd.print(models[i].getName());
+      //screen.print(models[i].getName());
+      //pos+=20;
     }
   }
-  showMenuNav(currentMenuModelPos, 20);
+  showMenuNav(currentMenuModelPos);
 }
 
 void updateCurrentModel(byte index){
-  screen.setColor(white.r, white.g, white.b);
+  //screen.setColor(white.r, white.g, white.b);
   byte pos = 20 + 20*currentModel;
-  screen.setPrintPos(5, pos);
-  screen.print(models[currentModel].getName());
+  //screen.setPrintPos(5, pos);
+  //screen.print(models[currentModel].getName());
 
   currentModel = currentMenuModelPos;
 
-  screen.setColor(blue.r, blue.g, blue.b);
+  //screen.setColor(blue.r, blue.g, blue.b);
   pos = 20 + 20*currentModel;
-  screen.setPrintPos(5, pos);
-  screen.print(models[currentModel].getName());
+  //screen.setPrintPos(5, pos);
+  //screen.print(models[currentModel].getName());
   //showMenuNav(currentMenuModelPos, 20);
 }
 
 void showTrims(){
-  screen.clearScreen();
-  screen.setFont(ucg_font_fur11_hr);
-  screen.setColor(white.r, white.g, white.b);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  //screen.clearScreen();
+  //screen.setFont(ucg_font_fur11_hr);
+  //screen.setColor(white.r, white.g, white.b);
 
   //String trimNames[4] = {"Roll", "Pitch", "Throttle", "Yaw"};
-  byte pos = 20;
+  //byte pos = 20;
   //int sizeOfanArray = *(&array + 1) - array;
   byte trimsLength = models[currentModel].getTrimLength();
   for(byte i = 0; i < trimsLength; i++){
-    screen.setPrintPos(5, pos);
-    screen.print(models[currentModel].getTrim(i).getName());
-    screen.setPrintPos(100, pos);
-    screen.print(models[currentModel].getTrim(i).getAmount());
+    lcd.setCursor(0, i);
+    lcd.print(models[currentModel].getTrim(i).getName());
+    lcd.setCursor(17, i);
+    lcd.print(models[currentModel].getTrim(i).getAmount());
+    //screen.setPrintPos(5, pos);
+    //screen.print(models[currentModel].getTrim(i).getName());
+    //screen.setPrintPos(100, pos);
+    //screen.print(models[currentModel].getTrim(i).getAmount());
 
-    pos+=(screen.getWidth()-40)/trimsLength;
+    //pos+=(screen.getWidth()-40)/trimsLength;
   }
 }
 
 void showRevs(){
-  screen.clearScreen();
-  screen.setFont(ucg_font_fur11_hr);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  //screen.clearScreen();
+  //screen.setFont(ucg_font_fur11_hr);
 
   //String trimNames[4] = {"Roll", "Pitch", "Throttle", "Yaw"};
-  byte pos = 20;
+  //byte pos = 20;
   //int sizeOfanArray = *(&array + 1) - array;
   byte trimsLength = models[currentModel].getTrimLength();
   for(byte i = 0; i < trimsLength; i++){
-    screen.setColor(white.r, white.g, white.b);
-    screen.setPrintPos(5, pos);
-    screen.print(models[currentModel].getTrim(i).getName());
-    screen.setPrintPos(70, pos);
+    //screen.setColor(white.r, white.g, white.b);
+    //screen.setPrintPos(5, pos);
+    //screen.print(models[currentModel].getTrim(i).getName());
+    //screen.setPrintPos(70, pos);
+    lcd.setCursor(2, i);
+    lcd.print(models[currentModel].getTrim(i).getName());
+    lcd.setCursor(16, i);
     if(models[currentModel].getTrim(i).isRev()){
-      screen.setColor(red.r, red.g, red.b);
-      screen.print("Reversed");
+      //screen.setColor(red.r, red.g, red.b);
+      //screen.print("Reversed");
+      lcd.print("rev");
     }else{
-      screen.setColor(wblue.r, wblue.g, wblue.b);
-      screen.print("Normal");
+      //screen.setColor(wblue.r, wblue.g, wblue.b);
+      //screen.print("Normal");
+      lcd.print("nor");
     }
 
-    pos+=(screen.getWidth()-40)/trimsLength;
+    //pos+=(screen.getWidth()-40)/trimsLength;
   }
-  showMenuNav(currentTrimPos, (screen.getWidth()-40)/trimsLength);
+  //showMenuNav(currentTrimPos, (screen.getWidth()-40)/trimsLength);
 }
 
 void updateTrimVal(int trimID){
-  screen.setFont(ucg_font_fur11_hr);
-  screen.setColor(178, 247, 239);
+  //screen.setFont(ucg_font_fur11_hr);
+  //screen.setColor(178, 247, 239);
   byte pos = 20;
   byte triml = models[currentModel].getTrimLength();
   for(byte i = 0; i < triml; i++){
      if(trimID == i){
-        screen.setPrintPos(100, pos);
-        screen.print(String(models[currentModel].getTrim(i).getAmount()) + "    ");
+        //screen.setPrintPos(100, pos);
+        //screen.print(String(models[currentModel].getTrim(i).getAmount()) + "    ");
         return;
      }
-     pos+=(screen.getWidth()-30)/triml;
+     //pos+=(screen.getWidth()-30)/triml;
   }
 }
 
 void setup() {
+  lcd.begin(20, 4);
   Serial.begin(9600);
 
   models[currentModel].setName("Model de test");
@@ -272,8 +315,8 @@ void setup() {
   }
   
 
-  screen.begin(UCG_FONT_MODE_SOLID);
-  screen.setRotate270();
+  //screen.begin(UCG_FONT_MODE_SOLID);
+  //screen.setRotate270();
   
   showInfosScreen();
   //menu();
@@ -297,7 +340,7 @@ void loop() {
     lastAckReceived = millis();
   }
 
-  radio.write(&commands, sizeof(Commands));
+  radio.write(&commands, sizeof(commands));
 
   
   int val = analogRead(btnValue);
@@ -383,8 +426,9 @@ void loop() {
             }else if(menuLevel == 1 && currentMenuPos == 0){
               //menuModelsNav(false);
               universalMenuNave(false, *(&models + 1) - models, 20, currentMenuModelPos);
+              menuModels();
             }else if(menuLevel == 1 && currentMenuPos == 2){
-              universalMenuNave(false, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
+              //universalMenuNave(false, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
             }
             break;
           case 10:
@@ -395,8 +439,9 @@ void loop() {
             }else if(menuLevel == 1 && currentMenuPos == 0){
               //menuModelsNav(true);
               universalMenuNave(true, *(&models + 1) - models, 20, currentMenuModelPos);
+              menuModels();
             }else if(menuLevel == 1 && currentMenuPos == 2){
-              universalMenuNave(true, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
+              //universalMenuNave(true, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
             }
             break;
           case 11:
@@ -416,16 +461,16 @@ void loop() {
               }else if(currentMenuPos == 2){
                 models[currentModel].reverseTrim(currentTrimPos);
 
-                screen.setPrintPos(70, 20 + currentTrimPos*(screen.getWidth()-40)/models[currentModel].getTrimLength());
+                //screen.setPrintPos(70, 20 + currentTrimPos*(//screen.getWidth()-40)/models[currentModel].getTrimLength());
                 if(models[currentModel].getTrim(currentTrimPos).isRev()){
-                  screen.setColor(red.r, red.g, red.b);
-                  screen.print("Reversed");
+                  //screen.setColor(red.r, red.g, red.b);
+                  //screen.print("Reversed");
                 }else{
-                  screen.setColor(wblue.r, wblue.g, wblue.b);
-                  screen.print("Normal    ");
+                  //screen.setColor(wblue.r, wblue.g, wblue.b);
+                  //screen.print("Normal    ");
                 }
               }
-              //showMenuNav(currentTrimPos, (screen.getWidth()-30)/models[currentModel].getTrimLength());
+              //showMenuNav(currentTrimPos, (//screen.getWidth()-30)/models[currentModel].getTrimLength());
             }            
             break;
         }
