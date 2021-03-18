@@ -6,15 +6,15 @@
 class Model
 {
 private:
-    String name;
+    char* name;
     Trim trims[4];
     /* data */
 public:
-    Model(String name);
-    String getName();
+    Model(char* name);
+    char* getName();
     Trim getTrim(byte index);
     byte getTrimLength();
-    void setName(String name);
+    void setName(char* name);
     void setTrimAmount(byte id, byte amount);
     void reverseTrim(byte id);
     void incTrim(byte id, int step);

@@ -1,9 +1,8 @@
 #include <Trim.h>
-#include <Arduino.h>
 
     Trim::Trim():amount(0), rev(false){};
 
-    void Trim::setName(String name){
+    void Trim::setName(char* name){
         Trim::name = name;
     }
 
@@ -15,7 +14,7 @@
         Trim::rev = rev;
     }
 
-    String Trim::getName(){
+    char* Trim::getName(){
         return Trim::name;
     }
 

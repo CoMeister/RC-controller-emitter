@@ -1,5 +1,5 @@
 
-(rules PCB rc-emitter_tft_trim_board
+(rules PCB rc-emitter_tft
   (snap_angle 
     fortyfive_degree
   )
@@ -11,18 +11,18 @@
     (via_costs 50)
     (plane_via_costs 5)
     (start_ripup_costs 100)
-    (start_pass_no 9)
+    (start_pass_no 688)
     (layer_rule F.Cu
       (active on)
       (preferred_direction vertical)
       (preferred_direction_trace_costs 1.0)
-      (against_preferred_direction_trace_costs 4.8)
+      (against_preferred_direction_trace_costs 2.3)
     )
     (layer_rule B.Cu
       (active on)
       (preferred_direction horizontal)
       (preferred_direction_trace_costs 1.0)
-      (against_preferred_direction_trace_costs 1.3)
+      (against_preferred_direction_trace_costs 1.8)
     )
   )
   (rule
@@ -63,7 +63,12 @@
     )
   )
   (class "kicad_default"
-    "Net-(J2-Pad3)" "Net-(J2-Pad2)" "Net-(J2-Pad1)" "Net-(R1-Pad2)"
+    GND 3.2V "Net-(C0-Pad2)" "Net-(C1-Pad1)" +5V "Net-(J1-Pad7)" "Net-(J1-Pad6)" "Net-(J1-Pad4)"
+    "Net-(J1-Pad3)" "Net-(J2-Pad1)" "Net-(J3-Pad1)" "Net-(J4-Pad1)" "Net-(J5-Pad1)" "Net-(R1-Pad1)" "Net-(J1-Pad5)" "Net-(J6-Pad1)"
+    "Net-(J7-Pad1)" "Net-(J8-Pad4)" "Net-(J8-Pad3)" "Net-(J9-Pad4)" "Net-(J9-Pad3)" "Net-(J1-Pad8)" "Net-(J2-Pad2)" "Net-(J10-Pad5)"
+    "Net-(J10-Pad4)" "Net-(J10-Pad3)" "Net-(J10-Pad2)" "Net-(J10-Pad1)" "Net-(U0-Pad21)" "Net-(U0-Pad20)" "Net-(LCD1-Pad15)" "Net-(LCD1-Pad14)"
+    "Net-(LCD1-Pad13)" "Net-(LCD1-Pad12)" "Net-(LCD1-Pad11)" "Net-(LCD1-Pad10)" "Net-(LCD1-Pad9)" "Net-(LCD1-Pad8)" "Net-(LCD1-Pad7)" "Net-(LCD1-Pad5)"
+    "Net-(LCD1-Pad4)" "Net-(LCD1-Pad3)"
     (clearance_class "kicad_default")
     (via_rule kicad_default)
     (rule

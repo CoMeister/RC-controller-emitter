@@ -4,12 +4,12 @@
   (placement
     (resolution um 10)
     (component Button_Switch_THT:SW_PUSH_6mm_H4.3mm
-      (place SW4 1525000 -890000 front 0)
-      (place SW2 1525000 -785000 front 0)
+      (place SW2 1525000 -890000 front 0)
+      (place SW1 1525000 -785000 front 0)
     )
     (component Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal
-      (place R4 1610000 -970000 back 0)
-      (place R2 1610000 -750000 back 0)
+      (place R2 1610000 -970000 back 0)
+      (place R1 1610000 -750000 back 0)
     )
     (component Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical
       (place J2 1534600 -1010000 back 90)
@@ -37,59 +37,54 @@
     (network_out 
       (net "Net-(J2-Pad3)"
         (wire
-          (path F.Cu 2500
-            1585400 -1010000
-            1585400 -998247
-          )
-        )
-        (wire
-          (path F.Cu 2500
-            1585400 -998247
-            1576735 -989582
-            1576735 -903265
-            1590000 -890000
-          )
-        )
-        (wire
-          (path B.Cu 2500
-            1525000 -890000
-            1590000 -890000
-          )
-        )
-        (wire
-          (path F.Cu 2500
-            1525000 -785000
-            1511505 -798495
-            1511505 -876505
-            1525000 -890000
-          )
-        )
-        (wire
           (path B.Cu 2500
             1525000 -785000
             1590000 -785000
           )
+          (type protect)
+        )
+        (wire
+          (path F.Cu 2500
+            1525000 -785000
+            1511500 -798495
+            1511500 -876505
+            1525000 -890000
+          )
+          (type protect)
+        )
+        (wire
+          (path B.Cu 2500
+            1525000 -890000
+            1590000 -890000
+          )
+          (type protect)
+        )
+        (wire
+          (path F.Cu 2500
+            1585400 -1010000
+            1585400 -998247
+            1576740 -989582
+            1576740 -903265
+            1590000 -890000
+          )
+          (type protect)
         )
       )
       (net "Net-(J2-Pad2)"
         (wire
           (path F.Cu 2500
             1560000 -860000
-            1590000 -830000
+            1555000 -860000
+            1525000 -830000
           )
+          (type protect)
         )
         (wire
           (path F.Cu 2500
             1560000 -1010000
             1560000 -860000
           )
-        )
-        (wire
-          (path F.Cu 2500
-            1560000 -860000
-            1555000 -860000
-            1525000 -830000
-          )
+          (type protect)
         )
         (wire
           (path F.Cu 2500
@@ -97,6 +92,14 @@
             1610000 -810000
             1590000 -830000
           )
+          (type protect)
+        )
+        (wire
+          (path F.Cu 2500
+            1560000 -860000
+            1590000 -830000
+          )
+          (type protect)
         )
       )
       (net "Net-(J2-Pad1)"
@@ -110,36 +113,34 @@
           (path B.Cu 2500
             1534600 -1010000
             1534600 -998247
-          )
-        )
-        (wire
-          (path B.Cu 2500
-            1534600 -998247
-            1517606 -981253
+            1517610 -981253
             1508400 -981253
           )
+          (type protect)
         )
       )
-      (net "Net-(R2-Pad2)"
+      (net "Net-(R1-Pad2)"
         (wire
-          (path B.Cu 2500
+          (path F.Cu 2500
+            1506996 -916997
             1525000 -935000
-            1590000 -935000
           )
+          (type protect)
         )
         (wire
           (path F.Cu 2500
+            1506996 -916997
+            1506996 -770522
+            1508400 -769118
             1508400 -750000
-            1508400 -761253
           )
         )
         (wire
           (path F.Cu 2500
-            1508400 -761253
-            1506711 -762942
-            1506711 -916711
-            1525000 -935000
+            1506710 -916711
+            1506996 -916997
           )
+          (type protect)
         )
         (wire
           (path B.Cu 2500
@@ -147,6 +148,14 @@
             1590000 -950000
             1590000 -935000
           )
+          (type protect)
+        )
+        (wire
+          (path B.Cu 2500
+            1525000 -935000
+            1590000 -935000
+          )
+          (type protect)
         )
       )
     )

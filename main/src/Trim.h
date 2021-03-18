@@ -4,7 +4,7 @@
 class Trim
 {
 private:
-    String name;
+    char* name;
     int amount;
     bool rev;
 public:
@@ -12,9 +12,9 @@ public:
 
     void setAmount(int amount);
     void setRev(bool rev);
-    void setName(String name);
+    void setName(char* name);
 
-    String getName();
+    char* getName();
     int getAmount();
     bool isRev();
 };

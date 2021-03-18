@@ -1,8 +1,6 @@
-#include <Arduino.h>
-#include <Trim.h>
 #include <Model.h>
 
-    Model::Model(String name):
+    Model::Model(char* name):
         name(name){
             for(byte i = 0; i < 4; i++){
                 trims[i] = Trim();
@@ -14,7 +12,7 @@
             trims[3].setName("Yaw");
         }
 
-    String Model::getName(){
+    char* Model::getName(){
         return name;
     }
 
@@ -26,7 +24,7 @@
         return *(&trims + 1) - trims;
     }
 
-    void Model::setName(String name){
+    void Model::setName(char* name){
         Model::name = name;
     }
 
