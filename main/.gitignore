@@ -45,7 +45,7 @@ out/
 .clang_complete
 .gcc-flags.json
 .pio/*
-test
+test/*
 lib
 ### vscode ###
 .vscode/*
