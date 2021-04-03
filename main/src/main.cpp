@@ -8,14 +8,15 @@
  * (74hc595)
  **/
 
-#include <Arduino.h>
-#include <SPI.h>
-#include <RF24.h>
-#include <printf.h>
-#include <Model.h>
-#include <Trim.h>
+#include "Arduino.h"
+#include "SPI.h"
+#include "RF24.h"
+#include "printf.h"
+#include "Model.h"
+#include "Trim.h"
+#include "HC165.h"
 //#include <EEPROM.h>
-#include <LiquidCrystal.h>
+#include "LiquidCrystal.h"
 
 #define TRIMSTEP 2
 #define BTNDELAY 3000
@@ -26,15 +27,22 @@ const uint64_t txAddr = 0xABCDABCD71;
 const uint64_t rxAddr = 0x544d52687C;
 
 const uint8_t gimballAddr[4] = {A1, A0, A2, A3}; //roll, pitch, throttle, yaw
-const uint8_t btnValue = A4;
+HC165 serialInBtns;
+
 //                           roll -         +         pitch -       +         yaw -         +         thr -         +            OK       menu/back     menu -      menu +
-const int btnArray[12][2] = {{835, 845}, {850, 863}, {865, 870}, {877, 887}, {890, 903}, {906, 925}, {917, 934}, {936, 948}, {952, 963}, {967, 983}, {985, 1000}, {1003, 1025}};
+//const int btnArray[12][2] = {{835, 845}, {850, 863}, {865, 870}, {877, 887}, {890, 903}, {906, 925}, {917, 934}, {936, 948}, {952, 963}, {967, 983}, {985, 1000}, {1003, 1025}};
 Model models[6] = {Model((char *)"Model-0"), Model((char *)"Model-1"), Model((char *)"Model-2"), Model((char *)"Model-3"), Model((char *)"Model-4"), Model((char *)"Model-5")};
 uint8_t currentMenuModelPos = 0;
 uint8_t currentModel = 0;
 uint8_t currentTrimPos = 0;
 uint8_t menuLCDpos = 0;
-int timeAtLastBtnPressed = 0;
+
+long lastPress = 0;
+long showTrimTime = 0;
+
+bool showTrim = false;
+bool infoScreen = false;
+
 int menuLevel = -1; //-1 --> no into the menu
 bool press = true;
 
@@ -59,17 +67,18 @@ const int rs = 3, en = 4, d4 = 5, d5 = 6, d6 = 7, d7 = 8;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 int mapJoyVal(int val, int min, int mid, int max, bool rev);
-void showInfosScreen();
+void infosScreen();
 void radioConfiguration();
 void radioConfiguration();
 void showMenuNav(uint8_t pos);
-void universalMenuNave(bool way, uint8_t menuLength, uint8_t & pos); //& pos --> pass a reference
+void universalMenuNave(bool way, uint8_t menuLength, uint8_t &pos); //& pos --> pass a reference
 void menu();
 void menuModels();
 void updateCurrentModel(uint8_t index);
+void incrementTrim(uint8_t index, int8_t trimStep);
 void showTrims();
+void trimInfos(uint8_t index);
 void showRevs();
-void updateTrimVal(int trimID);
 
 void setup()
 {
@@ -78,7 +87,7 @@ void setup()
 
   //models[currentModel].setName((char *)"Model de test");
 
-  pinMode(btnValue, INPUT);
+  serialInBtns = HC165(A4, 2, A5, 2);
 
   radioConfiguration();
   printf_begin();
@@ -93,7 +102,7 @@ void setup()
     count++;
   }
 
-  showInfosScreen();
+  infosScreen();
   //menu();
   /*if(EEPROM.read(0) != 0x00){
     //models = EEPROM.read(0);
@@ -120,208 +129,153 @@ void loop()
 
   radio.write(&commands, sizeof(commands));
 
-  int val = analogRead(btnValue);
-  if (val > 200)
+  int btnVal = serialInBtns.readByte();
+  if (btnVal != 0 && millis() - lastPress > 250)
   {
-    Serial.print("Valeur boutton analogue = ");
-    Serial.println(String(val));
-  }
+    Serial.print(btnVal, BIN);
+    Serial.print(" = ");
+    Serial.println(btnVal);
 
-  if (val > 200 && press)
-  {
-
-    Serial.print("millis() - (long)timeAtLastBtnPressed) = ");
-    Serial.print(millis() - (long)timeAtLastBtnPressed);
-    Serial.print("\t BTNDELAY = ");
-    Serial.println(BTNDELAY);
-
-    uint8_t indexPressedBtn = -1;
-    for (uint8_t i = 0; i < 12; i++)
-    { //watch all btns
-      if (val >= btnArray[i][0] && val <= btnArray[i][1])
-      {                      //check which button is pressed
-        indexPressedBtn = i; //set button pressed indexPressedBtn
+    switch (btnVal)
+    {
+    case 1: //roll--
+      incrementTrim(0, -TRIMSTEP);
+      break;
+    case 2: //roll++
+      incrementTrim(0, TRIMSTEP);
+      break;
+    case 4: //pitch--
+      incrementTrim(1, -TRIMSTEP);
+      break;
+    case 8: //pitch++
+      incrementTrim(1, TRIMSTEP);
+      break;
+    case 16: //throttle--
+      incrementTrim(2, -TRIMSTEP);
+      break;
+    case 32: //throttle++
+      incrementTrim(2, TRIMSTEP);
+      break;
+    case 64: //yaw--
+      incrementTrim(3, -TRIMSTEP);
+      break;
+    case 128: //yaw++
+      incrementTrim(3, TRIMSTEP);
+      break;
+    case 256: //Menu/back
+      if (menuLevel < 0)
+      {
+        menuLevel++;
       }
-      //Serial.println(" --> " + String(indexPressedBtn));
-      switch (indexPressedBtn)
-      {       //button action list
-      case 0: //Trim roll-
-        models[currentModel].incTrim(0, -TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
+      else
+      {
+        menuLevel--;
+      }
+      if (menuLevel < 0)
+      {
+        infosScreen();
+      }
+      else
+      {
+        menu();
+      }
+      break;
+    case 512: //ok
+      if (menuLevel == 0)
+      {
+        if (currentMenuPos == 0)
         {
-          updateTrimVal(0);
-        }
-        break;
-      case 1: //Trim roll+
-        models[currentModel].incTrim(0, TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
-        {
-          updateTrimVal(0);
-        }
-        //showTrim(0, trims[0]);
-        break;
-      case 2: //Trim pitch -
-        models[currentModel].incTrim(1, -TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
-        {
-          updateTrimVal(1);
-        }
-        //showTrim(1, trims[1]);
-        break;
-      case 3: //Trim pitch +
-        models[currentModel].incTrim(1, TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
-        {
-          updateTrimVal(1);
-        }
-        //showTrim(1, trims[1]);
-        break;
-      case 4: //Trim throtle -
-        models[currentModel].incTrim(2, -TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
-        {
-          updateTrimVal(2);
-        }
-        //showTrim(2, trims[2]);
-        break;
-      case 5: //Trim throtle +
-        models[currentModel].incTrim(2, TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
-        {
-          updateTrimVal(2);
-        }
-        break;
-      case 6: //Trim yaw -
-        models[currentModel].incTrim(3, -TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
-        {
-          updateTrimVal(3);
-        }
-        //showTrim(3, trims[3]);
-        break;
-      case 7: //Trim yaw +
-        models[currentModel].incTrim(3, TRIMSTEP);
-        if (menuLevel == 1 && currentMenuPos == 1)
-        {
-          updateTrimVal(3);
-        }
-        //showTrim(3, trims[3]);
-        break;
-      case 8:
-        //menu ok
-        if (menuLevel == 0)
-        {
-          if (currentMenuPos == 0)
-          {
-            menuModels();
-          }
-          else if (currentMenuPos == 1)
-          {
-            showTrims();
-          }
-          else if (currentMenuPos == 2)
-          {
-            showRevs();
-          }
-          menuLevel++;
-        }
-        else if (menuLevel == 1)
-        {
-          if (currentMenuPos == 0)
-          {
-            updateCurrentModel(currentMenuModelPos);
-            menuModels();
-          }
-          else if (currentMenuPos == 2)
-          {
-            models[currentModel].reverseTrim(currentTrimPos);
-            delay(10);
-            showRevs();
-
-            //screen.setPrintPos(70, 20 + currentTrimPos*(//screen.getWidth()-40)/models[currentModel].getTrimLength());
-            /*if (models[currentModel].getTrim(currentTrimPos).isRev())
-              {
-                //screen.setColor(red.r, red.g, red.b);
-                //screen.print("Reversed");
-              }
-              else
-              {
-                //screen.setColor(wblue.r, wblue.g, wblue.b);
-                //screen.print("Normal    ");
-              }*/
-          }
-          //showMenuNav(currentTrimPos, (//screen.getWidth()-30)/models[currentModel].getTrimLength());
-        }
-
-        break;
-      case 9:
-        //menu/back
-        if (menuLevel < 0)
-        {
-          menuLevel++;
-        }
-        else
-        {
-          menuLevel--;
-        }
-        if (menuLevel < 0)
-        {
-          showInfosScreen();
-        }
-        else
-        {
-          menu();
-        }
-
-        break;
-      case 10:
-        //menu-
-        Serial.println("Menu -");
-        if (menuLevel == 0)
-        {
-          //menuNav(false);
-          universalMenuNave(false, *(&menuElem + 1) - menuElem, currentMenuPos);
-        }
-        else if (menuLevel == 1 && currentMenuPos == 0)
-        {
-          //menuModelsNav(false);
-          universalMenuNave(false, *(&models + 1) - models, currentMenuModelPos);
           menuModels();
         }
-        else if (menuLevel == 1 && currentMenuPos == 2)
+        else if (currentMenuPos == 1)
         {
-          //universalMenuNave(false, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
-          universalMenuNave(false, models[currentModel].getTrimLength(), currentTrimPos);
+          showTrims();
         }
-        break;
-      case 11:
-        //menu+
-        Serial.println("Menu +");
-        if (menuLevel == 0) //menulevel = 0 => 1st menu, menulevel = 1 => subMenu
+        else if (currentMenuPos == 2)
         {
-          //menuNav(true);
-          universalMenuNave(true, *(&menuElem + 1) - menuElem, currentMenuPos);
+          showRevs();
         }
-        else if (menuLevel == 1 && currentMenuPos == 0)
+        menuLevel++;
+        Serial.print("menuLevel = ");
+        Serial.print(menuLevel);
+        Serial.print(" CurrentMenuPos = ");
+        Serial.println(currentMenuPos);
+      }
+      else if (menuLevel == 1)
+      {
+        if (currentMenuPos == 0)
         {
-          //menuModelsNav(true);
-          universalMenuNave(true, *(&models + 1) - models, currentMenuModelPos);
+          updateCurrentModel(currentMenuModelPos);
           menuModels();
         }
-        else if (menuLevel == 1 && currentMenuPos == 2)
+        else if (currentMenuPos == 2)
         {
-          //universalMenuNave(true, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
-          universalMenuNave(true, models[currentModel].getTrimLength(), currentTrimPos);
+          models[currentModel].reverseTrim(currentTrimPos);
+          //delay(10);
+          showRevs();
         }
-        break;
       }
+      break;
+    case 1024: //Menu--
+      if (menuLevel == 0)
+      {
+        //menuNav(false);
+        universalMenuNave(false, *(&menuElem + 1) - menuElem, currentMenuPos);
+      }
+      else if (menuLevel == 1 && currentMenuPos == 0)
+      {
+        //menuModelsNav(false);
+        universalMenuNave(false, *(&models + 1) - models, currentMenuModelPos);
+        menuModels();
+      }
+      else if (menuLevel == 1 && currentMenuPos == 2)
+      {
+        //universalMenuNave(false, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
+        universalMenuNave(false, models[currentModel].getTrimLength(), currentTrimPos);
+      }
+      break;
+    case 2048:            //Menu++
+      if (menuLevel == 0) //menulevel = 0 => 1st menu, menulevel = 1 => subMenu
+      {
+        //menuNav(true);
+        universalMenuNave(true, *(&menuElem + 1) - menuElem, currentMenuPos);
+      }
+      else if (menuLevel == 1 && currentMenuPos == 0)
+      {
+        //menuModelsNav(true);
+        universalMenuNave(true, *(&models + 1) - models, currentMenuModelPos);
+        menuModels();
+      }
+      else if (menuLevel == 1 && currentMenuPos == 2)
+      {
+        //universalMenuNave(true, models[currentModel].getTrimLength(), (screen.getWidth()-40)/models[currentModel].getTrimLength(), currentTrimPos);
+        universalMenuNave(true, models[currentModel].getTrimLength(), currentTrimPos);
+      }
+      break;
+
+      /*case 4096:  //
+        break;
+      case 8192:  //
+        break;
+      case 16384:  //
+        break;
+      case 32768:  //
+        break;*/
     }
-    timeAtLastBtnPressed = millis();
-    press = false;
+
+    lastPress = millis();
   }
-  else
+
+  if (showTrim && millis() - showTrimTime > 2500)
   {
-    press = true;
+    showTrimTime = millis();
+    infoScreen = true;
+  }
+  else if (infoScreen)
+  {
+    showTrim = false;
+    infosScreen();
+    infoScreen = false;
   }
 }
 
@@ -350,14 +304,12 @@ int mapJoyVal(int val, int min, int mid, int max, bool rev)
   return (rev ? 255 - val : val); //comparison operator
 }
 
-void showInfosScreen()
+void infosScreen()
 {
   lcd.clear();
-  lcd.print("Cob's radio");
+  lcd.print("Mega RC");
   lcd.setCursor(0, 1);
   lcd.print(models[currentModel].getName());
-  lcd.setCursor(0, 2);
-  lcd.print("bla bla");
 }
 
 void radioConfiguration()
@@ -382,7 +334,7 @@ void showMenuNav(uint8_t pos)
   lcd.print(">");
 }
 
-void universalMenuNave(bool way, uint8_t menuLength, uint8_t & pos) //manage pointer/addr update
+void universalMenuNave(bool way, uint8_t menuLength, uint8_t &pos) //manage pointer/addr update
 {
   lcd.setCursor(0, pos);
   lcd.print(" ");
@@ -452,7 +404,7 @@ void menu()
   //uint8_t pos = 0;
   //int sizeOfanArray = *(&array + 1) - array;
   uint8_t menuElemLength = sizeof(menuElem) / sizeof(menuElem[0]);
-  for (uint8_t i = 0; i < menuElemLength; i++)
+  for (uint8_t i = 0; i < menuElemLength; ++i)
   {
     lcd.setCursor(2, i);
     lcd.print(menuElem[i]);
@@ -477,12 +429,12 @@ void menuModels()
   lcd.clear();
   Serial.println("----- menuModels -----");
 
-  //for (uint8_t i = lastElemToShow - 4; i < lastElemToShow + 1; i++)
+  //for (uint8_t i = lastElemToShow - 4; i < lastElemToShow + 1; ++i)
   Serial.println("Loop to print models");
   int j = 0;
   if (currentMenuModelPos > 3)
   {
-    for (uint8_t i = currentMenuModelPos - 3; i < currentMenuModelPos + 1; i++)
+    for (uint8_t i = currentMenuModelPos - 3; i < currentMenuModelPos + 1; ++i)
     {
       lcd.setCursor(2, j);
       j++;
@@ -508,7 +460,7 @@ void menuModels()
   }
   else
   {
-    for (uint8_t i = 0; i < 4; i++)
+    for (uint8_t i = 0; i < 4; ++i)
     {
       lcd.setCursor(2, i);
       if (i < sizeof(models) / sizeof(models[i]))
@@ -543,6 +495,19 @@ void updateCurrentModel(uint8_t index)
   //showMenuNav(currentMenuModelPos, 20);
 }
 
+void incrementTrim(uint8_t index, int8_t trimStep)
+{
+  models[currentModel].incTrim(index, trimStep);
+  if (currentMenuPos == 1 && menuLevel == 1)
+  {
+    showTrims();
+  }
+  else
+  {
+    trimInfos(index);
+  }
+}
+
 void showTrims()
 {
   lcd.clear();
@@ -552,7 +517,7 @@ void showTrims()
   //uint8_t pos = 20;
   //int sizeOfanArray = *(&array + 1) - array;
   uint8_t trimsLength = models[currentModel].getTrimLength();
-  for (uint8_t i = 0; i < trimsLength; i++)
+  for (uint8_t i = 0; i < trimsLength; ++i)
   {
     lcd.setCursor(0, i);
     lcd.print(models[currentModel].getTrim(i).getName());
@@ -561,6 +526,16 @@ void showTrims()
 
     //pos+=(screen.getWidth()-40)/trimsLength;
   }
+}
+
+void trimInfos(uint8_t index)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(models[currentModel].getTrim(index).getName());
+  lcd.setCursor(2, 0);
+  lcd.print(models[currentModel].getTrim(index).getAmount());
+  showTrim = true;
 }
 
 void showRevs()
@@ -572,7 +547,7 @@ void showRevs()
   //uint8_t pos = 20;
   //int sizeOfanArray = *(&array + 1) - array;
   uint8_t trimsLength = models[currentModel].getTrimLength();
-  for (uint8_t i = 0; i < trimsLength; i++)
+  for (uint8_t i = 0; i < trimsLength; ++i)
   {
     lcd.setCursor(2, i);
     lcd.print(models[currentModel].getTrim(i).getName());
@@ -587,18 +562,4 @@ void showRevs()
     }
   }
   showMenuNav(currentTrimPos);
-}
-
-void updateTrimVal(int trimID)
-{
-  //uint8_t pos = 20;
-  uint8_t triml = models[currentModel].getTrimLength();
-  for (uint8_t i = 0; i < triml; i++)
-  {
-    if (trimID == i)
-    {
-      return;
-    }
-    //pos+=(screen.getWidth()-30)/triml;
-  }
 }

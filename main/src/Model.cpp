@@ -1,41 +1,49 @@
-#include <Model.h>
+#include "Model.h"
 
-    Model::Model(char* name):
-        name(name){
-            for(byte i = 0; i < 4; i++){
-                trims[i] = Trim();
-            }
-
-            trims[0].setName("Roll");
-            trims[1].setName("Pitch");
-            trims[2].setName("Throttle");
-            trims[3].setName("Yaw");
-        }
-
-    char* Model::getName(){
-        return name;
+Model::Model(char *name) : name(name)
+{
+    for (int8_t i = 0; i < 4; i++)
+    {
+        trims[i] = Trim();
     }
 
-    Trim Model::getTrim(byte index){
-        return trims[index];
-    }
+    trims[0].setName((char *)"Roll");
+    trims[1].setName((char *)"Pitch");
+    trims[2].setName((char *)"Throttle");
+    trims[3].setName((char *)"Yaw");
+}
 
-    byte Model::getTrimLength(){
-        return *(&trims + 1) - trims;
-    }
+char *Model::getName() const
+{
+    return name;
+}
 
-    void Model::setName(char* name){
-        Model::name = name;
-    }
+Trim Model::getTrim(int8_t index) const
+{
+    return trims[index];
+}
 
-    void Model::setTrimAmount(byte id, byte amount){
-        Model::trims[id].setAmount(amount);
-    }
+int8_t Model::getTrimLength() const
+{
+    return *(&trims + 1) - trims;
+}
 
-    void Model::reverseTrim(byte id){
-        Model::trims[id].setRev(!trims[id].isRev());
-    }
+void Model::setName(char *name)
+{
+    Model::name = name;
+}
 
-    void Model::incTrim(byte id, int step){
-         Model::trims[id].setAmount(trims[id].getAmount()+step);
-    }
+void Model::setTrimAmount(int8_t id, int8_t amount)
+{
+    Model::trims[id].setAmount(amount);
+}
+
+void Model::reverseTrim(int8_t id)
+{
+    Model::trims[id].setRev(!trims[id].isRev());
+}
+
+void Model::incTrim(int8_t id, int8_t step)
+{
+    Model::trims[id].setAmount(trims[id].getAmount() + step);
+}

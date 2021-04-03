@@ -5,18 +5,18 @@ class Trim
 {
 private:
     char* name;
-    int amount;
+    int8_t amount;
     bool rev;
 public:
     Trim();
 
-    void setAmount(int amount);
+    void setAmount(int8_t amount);
     void setRev(bool rev);
     void setName(char* name);
 
-    char* getName();
-    int getAmount();
-    bool isRev();
+    char* getName() const;
+    int8_t getAmount() const;
+    bool isRev() const;
 };
 
 #endif

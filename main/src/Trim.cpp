@@ -6,7 +6,7 @@
         Trim::name = name;
     }
 
-    void Trim::setAmount(int amount){
+    void Trim::setAmount(int8_t amount){
         Trim::amount = amount;
     }
 
@@ -14,15 +14,15 @@
         Trim::rev = rev;
     }
 
-    char* Trim::getName(){
+    char* Trim::getName() const{
         return Trim::name;
     }
 
-    int Trim::getAmount(){
+    int8_t Trim::getAmount() const{
         return Trim::amount;
     }
 
-    bool Trim::isRev(){
+    bool Trim::isRev() const{
         return Trim::rev;
     }
 
