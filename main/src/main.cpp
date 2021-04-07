@@ -15,23 +15,42 @@
 #include "Model.h"
 #include "Trim.h"
 #include "HC165.h"
-//#include <EEPROM.h>
+#include <EEPROM.h>
 #include "LiquidCrystal.h"
 
 #define TRIMSTEP 2
-#define BTNDELAY 3000
+#define BTNDELAY 250
+#define MODEL_NAME_LENGTH 6
+
+#define ROLL_LESS 1
+#define ROLL_MORE 2
+#define PITCH_LESS 4
+#define PITCH_MORE 8
+#define THROTTLE_LESS 16
+#define THROTTLE_MORE 32
+#define YAW_LESS 64
+#define YAW_MORE 128
+#define MENU_B 256
+#define OK 512
+#define MENU_LESS 1024
+#define MENU_MORE 2048
+#define OPT0 4096
+#define OPT1 8192
+#define OPT2 16384
+#define OPT3 32768
 
 RF24 radio(9, 10); //CE, CSN
 
-const uint64_t txAddr = 0xABCDABCD71;
-const uint64_t rxAddr = 0x544d52687C;
+const uint8_t txAddr = 0x02;
+const uint8_t rxAddr = 0x01;
 
 const uint8_t gimballAddr[4] = {A1, A0, A2, A3}; //roll, pitch, throttle, yaw
 HC165 serialInBtns;
 
 //                           roll -         +         pitch -       +         yaw -         +         thr -         +            OK       menu/back     menu -      menu +
 //const int btnArray[12][2] = {{835, 845}, {850, 863}, {865, 870}, {877, 887}, {890, 903}, {906, 925}, {917, 934}, {936, 948}, {952, 963}, {967, 983}, {985, 1000}, {1003, 1025}};
-Model models[6] = {Model((char *)"Model-0"), Model((char *)"Model-1"), Model((char *)"Model-2"), Model((char *)"Model-3"), Model((char *)"Model-4"), Model((char *)"Model-5")};
+
+Model models[6] = {Model((char *)"MODEL0"), Model((char *)"MODEL1"), Model((char *)"MODEL2"), Model((char *)"MODEL3"), Model((char *)"MODEL4"), Model((char *)"MODEL5")};
 uint8_t currentMenuModelPos = 0;
 uint8_t currentModel = 0;
 uint8_t currentTrimPos = 0;
@@ -69,19 +88,25 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 int mapJoyVal(int val, int min, int mid, int max, bool rev);
 void infosScreen();
 void radioConfiguration();
-void radioConfiguration();
 void showMenuNav(uint8_t pos);
 void universalMenuNave(bool way, uint8_t menuLength, uint8_t &pos); //& pos --> pass a reference
 void menu();
 void menuModels();
-void updateCurrentModel(uint8_t index);
+void setModelName(uint8_t index);
 void incrementTrim(uint8_t index, int8_t trimStep);
 void showTrims();
 void trimInfos(uint8_t index);
 void showRevs();
+void saveModels();
+void loadModels();
 
 void setup()
 {
+  for (uint8_t i = 0; i < sizeof(gimballAddr) / sizeof(int); i++)
+  {
+    pinMode(gimballAddr[i], INPUT);
+  }
+
   lcd.begin(20, 4);
   Serial.begin(9600);
 
@@ -103,6 +128,23 @@ void setup()
   }
 
   infosScreen();
+
+  /*Serial.print("Size of Model array: ");
+  Serial.println(sizeof(models), DEC);
+
+  Serial.print("Size of one Model: ");
+  Serial.println(sizeof(models[0]));*/
+
+  /*Model eepromModels[6];
+  delay(200);
+
+  EEPROM.get(0, eepromModels);
+
+  Serial.print("Model 2 name: ");
+  Serial.println(eepromModels[2].getName());
+
+  Serial.println(eepromModels[2].getTrim(2).getAmount());*/
+
   //menu();
   /*if(EEPROM.read(0) != 0x00){
     //models = EEPROM.read(0);
@@ -122,6 +164,12 @@ void loop()
   commands.throttle = mapJoyVal(analogRead(gimballAddr[2]) + models[currentModel].getTrim(2).getAmount(), 222, 669, 1023, models[currentModel].getTrim(2).isRev());
   commands.yaw = mapJoyVal(analogRead(gimballAddr[3]) + models[currentModel].getTrim(3).getAmount(), 133, 585, 1023, models[currentModel].getTrim(3).isRev());
 
+  Serial.print("Pitch: ");
+  Serial.println(analogRead(gimballAddr[1]) + models[currentModel].getTrim(1).getAmount());
+
+  Serial.print("Throttle: ");
+  Serial.println(analogRead(gimballAddr[2]) + models[currentModel].getTrim(2).getAmount());
+
   if (radio.isAckPayloadAvailable())
   {
     lastAckReceived = millis();
@@ -130,7 +178,7 @@ void loop()
   radio.write(&commands, sizeof(commands));
 
   int btnVal = serialInBtns.readByte();
-  if (btnVal != 0 && millis() - lastPress > 250)
+  if (btnVal != 0 && millis() - lastPress > BTNDELAY)
   {
     Serial.print(btnVal, BIN);
     Serial.print(" = ");
@@ -138,31 +186,31 @@ void loop()
 
     switch (btnVal)
     {
-    case 1: //roll--
+    case ROLL_LESS: //roll--
       incrementTrim(0, -TRIMSTEP);
       break;
-    case 2: //roll++
+    case ROLL_MORE: //roll++
       incrementTrim(0, TRIMSTEP);
       break;
-    case 4: //pitch--
+    case PITCH_LESS: //pitch--
       incrementTrim(1, -TRIMSTEP);
       break;
-    case 8: //pitch++
+    case PITCH_MORE: //pitch++
       incrementTrim(1, TRIMSTEP);
       break;
-    case 16: //throttle--
+    case THROTTLE_LESS: //throttle--
       incrementTrim(2, -TRIMSTEP);
       break;
-    case 32: //throttle++
+    case THROTTLE_MORE: //throttle++
       incrementTrim(2, TRIMSTEP);
       break;
-    case 64: //yaw--
+    case YAW_LESS: //yaw--
       incrementTrim(3, -TRIMSTEP);
       break;
-    case 128: //yaw++
+    case YAW_MORE: //yaw++
       incrementTrim(3, TRIMSTEP);
       break;
-    case 256: //Menu/back
+    case MENU_B: //Menu/back
       if (menuLevel < 0)
       {
         menuLevel++;
@@ -180,7 +228,8 @@ void loop()
         menu();
       }
       break;
-    case 512: //ok
+    case OK: //ok
+
       if (menuLevel == 0)
       {
         if (currentMenuPos == 0)
@@ -196,17 +245,25 @@ void loop()
           showRevs();
         }
         menuLevel++;
-        Serial.print("menuLevel = ");
+        /*Serial.print("menuLevel = ");
         Serial.print(menuLevel);
         Serial.print(" CurrentMenuPos = ");
-        Serial.println(currentMenuPos);
+        Serial.println(currentMenuPos);*/
       }
       else if (menuLevel == 1)
       {
         if (currentMenuPos == 0)
         {
-          updateCurrentModel(currentMenuModelPos);
-          menuModels();
+
+          if (currentMenuModelPos == currentModel)
+          {
+            setModelName(currentMenuModelPos);
+          }
+          else
+          {
+            currentModel = currentMenuModelPos;
+            menuModels();
+          }
         }
         else if (currentMenuPos == 2)
         {
@@ -216,7 +273,8 @@ void loop()
         }
       }
       break;
-    case 1024: //Menu--
+    case MENU_LESS: //Menu--
+
       if (menuLevel == 0)
       {
         //menuNav(false);
@@ -234,7 +292,7 @@ void loop()
         universalMenuNave(false, models[currentModel].getTrimLength(), currentTrimPos);
       }
       break;
-    case 2048:            //Menu++
+    case MENU_MORE:       //Menu++
       if (menuLevel == 0) //menulevel = 0 => 1st menu, menulevel = 1 => subMenu
       {
         //menuNav(true);
@@ -253,13 +311,27 @@ void loop()
       }
       break;
 
-      /*case 4096:  //
+    case OPT2:
+      saveModels();
+      break;
+    case OPT1:
+      Serial.println(models[2].getName());
+      Serial.println(models[2].getTrim(2).getAmount());
+
+      loadModels();
+      delay(100);
+
+      Serial.println(models[2].getName());
+      Serial.println(models[2].getTrim(2).getAmount());
+      break;
+
+      /*case OPT0:  //
         break;
-      case 8192:  //
+      case OPT1:  //
         break;
-      case 16384:  //
+      case OPT2:  //
         break;
-      case 32768:  //
+      case OPT3:  //
         break;*/
     }
 
@@ -308,14 +380,14 @@ void infosScreen()
 {
   lcd.clear();
   lcd.print("Mega RC");
-  lcd.setCursor(0, 1);
+  lcd.setCursor(0, 2);
   lcd.print(models[currentModel].getName());
 }
 
 void radioConfiguration()
 {
   radio.begin(); //activer le module
-  radio.setChannel(0x01);
+  radio.setChannel(0x7E);
   radio.setRetries(15, 15);      //setter pour réessayer d'envoyer une requète 1er arguments -> fréquence *250millis du retry | 2em arguments -> combien d'essaye avant l'abandon
   radio.openWritingPipe(txAddr); //setter l'adresse du récepteur (tableau)
   radio.openReadingPipe(1, rxAddr);
@@ -427,10 +499,10 @@ void menu()
 void menuModels()
 {
   lcd.clear();
-  Serial.println("----- menuModels -----");
+  //Serial.println("----- menuModels -----");
 
   //for (uint8_t i = lastElemToShow - 4; i < lastElemToShow + 1; ++i)
-  Serial.println("Loop to print models");
+  //Serial.println("Loop to print models");
   int j = 0;
   if (currentMenuModelPos > 3)
   {
@@ -446,14 +518,14 @@ void menuModels()
           //lcd.setCursor(1, i - (lastElemToShow - 3));
           lcd.print(models[i].getName());
           lcd.print("-");
-          Serial.print("selected model: ");
-          Serial.println(models[i].getName());
+          //Serial.print("selected model: ");
+          //Serial.println(models[i].getName());
         }
         else
         {
           lcd.print(models[i].getName());
-          Serial.print("No selected model: ");
-          Serial.println(models[i].getName());
+          //Serial.print("No selected model: ");
+          //Serial.println(models[i].getName());
         }
       }
     }
@@ -470,14 +542,14 @@ void menuModels()
           //lcd.setCursor(1, i - (lastElemToShow - 3));
           lcd.print(models[i].getName());
           lcd.print("-");
-          Serial.print("selected model: ");
-          Serial.println(models[i].getName());
+          //Serial.print("selected model: ");
+          //Serial.println(models[i].getName());
         }
         else
         {
           lcd.print(models[i].getName());
-          Serial.print("No selected model: ");
-          Serial.println(models[i].getName());
+          //Serial.print("No selected model: ");
+          //Serial.println(models[i].getName());
         }
       }
     }
@@ -486,13 +558,70 @@ void menuModels()
   showMenuNav(currentMenuModelPos);
 }
 
-void updateCurrentModel(uint8_t index)
+void setModelName(uint8_t index)
 {
-  //uint8_t pos;// = 20 + 20 * currentModel;
+  char *name = models[index].getName();
+  uint8_t indexName = 255;
+  lastPress = 0;
+  int btnVal = 0;
+  while (btnVal != MENU_B)
+  {
+    btnVal = serialInBtns.readByte();
+    if (btnVal != 0 && (millis() - lastPress) > 250)
+    {
+      switch (btnVal)
+      {
+        Serial.print("OK: ");
+      case OK:
+        if (indexName < MODEL_NAME_LENGTH - 1)
+        {
+          ++indexName;
+        }
+        else
+        {
+          indexName = 0;
+        }
 
-  currentModel = currentMenuModelPos;
-  //pos = 20 + 20 * currentModel;
-  //showMenuNav(currentMenuModelPos, 20);
+        Serial.println(indexName);
+
+        break;
+      case MENU_MORE:
+        if (name[indexName] == 90)
+        {
+          name[indexName] = 48;
+        }
+        else if (name[indexName] == 57)
+        {
+          name[indexName] = 65;
+        }
+        else
+        {
+          ++name[indexName];
+        }
+        break;
+      case MENU_LESS:
+        if (name[indexName] == 48)
+        {
+          name[indexName] = 90;
+        }
+        else if (name[indexName] == 65)
+        {
+          name[indexName] = 57;
+        }
+        else
+        {
+          --name[indexName];
+        }
+        break;
+      }
+
+      menuModels();
+      lastPress = millis();
+      Serial.println(millis());
+      Serial.println(lastPress);
+    }
+  }
+  menuModels();
 }
 
 void incrementTrim(uint8_t index, int8_t trimStep)
@@ -562,4 +691,55 @@ void showRevs()
     }
   }
   showMenuNav(currentTrimPos);
+}
+
+void saveModels()
+{
+  Serial.println("----- EEPROM Save -----");
+  uint8_t eepromIndex = sizeof(models) + 1;
+  Serial.println(eepromIndex - 1);
+  EEPROM.put(0, models);
+  for (uint8_t i = 0; i < sizeof(models) / sizeof(models[0]); i++)
+  {
+    for (uint8_t j = 0; j < MODEL_NAME_LENGTH; j++)
+    {
+      EEPROM.put(eepromIndex, models[i].getName()[j]);
+      eepromIndex++;
+      Serial.print(eepromIndex);
+      Serial.print(" => ");
+      Serial.println(models[i].getName()[j]);
+    }
+    EEPROM.put(eepromIndex, '\0');
+    eepromIndex++;
+    Serial.print(eepromIndex);
+    Serial.print(" => ");
+    Serial.println("\0");
+  }
+  EEPROM.put(eepromIndex, currentModel);
+  eepromIndex++;
+}
+
+void loadModels()
+{
+  EEPROM.get(0, models);
+  uint8_t eepromIndex = sizeof(models) + 1;
+  Serial.println("----- EEPROM Load -----");
+
+  for (uint8_t i = 0; i < sizeof(models) / sizeof(models[0]); i++)
+  {
+    char name[MODEL_NAME_LENGTH + 1]; //+1 for "\0"
+    for (uint8_t j = 0; j < MODEL_NAME_LENGTH + 1; j++)
+    {
+      EEPROM.get(eepromIndex, name[j]);
+      eepromIndex++;
+      Serial.print(eepromIndex);
+      Serial.print(" => ");
+      Serial.println(name[j]);
+    }
+    Serial.println("Name loaded: ");
+    Serial.println(name);
+    models[i].setName(name);
+  }
+
+  EEPROM.get(eepromIndex, currentModel);
 }

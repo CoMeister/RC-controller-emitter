@@ -6,15 +6,16 @@
 class Model
 {
 private:
-    char* name;
+    char *name;
     Trim trims[4];
     /* data */
 public:
-    Model(char* name);
-    char* getName() const;
+    Model();
+    Model(char *name);
+    char *getName() const;
     Trim getTrim(int8_t index) const;
     int8_t getTrimLength() const;
-    void setName(char* name);
+    void setName(char *name);
     void setTrimAmount(int8_t id, int8_t amount);
     void reverseTrim(int8_t id);
     void incTrim(int8_t id, int8_t step);

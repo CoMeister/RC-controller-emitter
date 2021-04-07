@@ -1,5 +1,7 @@
 #include "Model.h"
 
+Model::Model(){}
+
 Model::Model(char *name) : name(name)
 {
     for (int8_t i = 0; i < 4; i++)
@@ -30,7 +32,12 @@ int8_t Model::getTrimLength() const
 
 void Model::setName(char *name)
 {
-    Model::name = name;
+    for(uint8_t i = 0; i < 6; i++)
+    {
+        Model::name[i] = name[i];
+    }
+    
+
 }
 
 void Model::setTrimAmount(int8_t id, int8_t amount)
